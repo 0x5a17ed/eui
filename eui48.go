@@ -15,36 +15,59 @@
 package eui
 
 import (
-	"errors"
 	"net"
 )
-
-var ErrInvalidMAC = errors.New("invalid hardware address")
 
 // A EUI48 represents a 64 bit wide extended unique identifier.
 type EUI48 [6]byte
 
-func (i EUI48) Hex() string    { return encodeHex(i[:]) }
-func (i EUI48) String() string { return i.Encode(1, ':') }
+func (i *EUI48) UnmarshalText(text []byte) error {
+	return i.FillFromString(string(text))
+}
+
+func (i EUI48) MarshalText() ([]byte, error) {
+	return []byte(i.String()), nil
+}
+
+func (i EUI48) Hex() string {
+	return encodeHex(i[:])
+}
+
+func (i EUI48) String() string {
+	return i.Encode(1, '-')
+}
 
 // Encode encodes the given EUI48 address in the specified format.
 func (i EUI48) Encode(groupSize int, delimiter byte) string {
 	return encodeGrouped(i[:], groupSize, delimiter)
 }
 
-// ParseEUI48FromMAC parses an EUI-48 or EUI-64 address and returns the EUI48 address.
-func ParseEUI48FromMAC(mac net.HardwareAddr) (out EUI48, err error) {
-	switch bits := len(mac) * 8; {
+func (i *EUI48) FillFromString(s string) error {
+	hwAddr, err := net.ParseMAC(s)
+	if err != nil {
+		return err
+	}
+	return i.FillFromHWAddr(hwAddr)
+}
+
+// FillFromHWAddr parses an EUI-48 or EUI-64 address and returns the EUI48 address.
+func (i *EUI48) FillFromHWAddr(hwAddr net.HardwareAddr) error {
+	switch bits := len(hwAddr) * 8; {
 	case bits == 48: // EUI-48.
-		copy(out[:], mac[:])
-	case bits == 64 && mac[3] == 0xff && mac[4] == 0xfe:
-		copy(out[0:3], mac[0:3])
-		copy(out[3:6], mac[5:8])
-		out[0] ^= 0x02
+		copy(i[:], hwAddr[:])
+	case bits == 64 && hwAddr[3] == 0xff && hwAddr[4] == 0xfe:
+		copy(i[0:3], hwAddr[0:3])
+		copy(i[3:6], hwAddr[5:8])
+		i[0] ^= 0x02
 
 	default:
-		err = ErrInvalidMAC
+		return ErrInvalidInput
 	}
+	return nil
+}
+
+func ParseEUI48FromHWAddr(hwaddr net.HardwareAddr) (out EUI48, err error) {
+	err = out.FillFromHWAddr(hwaddr)
 	return
 }
 
